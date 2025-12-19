@@ -3,6 +3,7 @@ import { MOCK_DEPARTMENTS_METADATA, MOCK_JOBS, MOCK_CANDIDATES, MOCK_TRAINING_PR
 import { Employee, DepartmentMetadata, Department, JobOpening, Candidate, CandidateStatus, TrainingProgram, Evaluation } from './types';
 import EmployeeList from './components/EmployeeList';
 import EmployeeDetail from './components/EmployeeDetail';
+import EmployeeForm, { NewEmployeeData } from './components/EmployeeForm';
 import DepartmentList from './components/DepartmentList';
 import DepartmentDetail from './components/DepartmentDetail';
 import RecruitmentList from './components/RecruitmentList';
@@ -39,6 +40,8 @@ const App: React.FC = () => {
     const [evaluations, setEvaluations] = useState<any[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
+    const [showAddEmployeeForm, setShowAddEmployeeForm] = useState<boolean>(false);
+    const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
     
     // View State
     const [view, setView] = useState<ViewState>('employees_list');
@@ -188,13 +191,91 @@ const App: React.FC = () => {
     };
 
     const handleAddEmployee = () => {
-        alert("Funcionalidade de Adicionar Colaborador: Abriria um Modal de Formulário aqui.");
+        setEditingEmployee(null);
+        setShowAddEmployeeForm(true);
     };
 
-    const handleDeleteEmployee = (id: string) => {
-        if(window.confirm('Tem a certeza que deseja remover este colaborador?')) {
-            setEmployees(prev => prev.filter(e => e.id !== id));
-            if(selectedEmployee?.id === id) handleBackToEmployeeList();
+    const handleEditEmployee = (emp: Employee) => {
+        setEditingEmployee(emp);
+        setShowAddEmployeeForm(true);
+    };
+
+    const handleSaveEmployee = async (data: NewEmployeeData, id?: string) => {
+        try {
+            if (id) {
+                // Modo edição - PUT
+                console.log('🔄 Atualizando colaborador:', id, data);
+                const response = await fetch(`${API_URL}/employees/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Erro ao atualizar colaborador');
+                }
+
+                console.log('✅ Colaborador atualizado com sucesso');
+            } else {
+                // Modo criação - POST
+                console.log('🔄 Criando novo colaborador:', data);
+                const response = await fetch(`${API_URL}/employees`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Erro ao criar colaborador');
+                }
+
+                console.log('✅ Colaborador criado com sucesso');
+            }
+
+            // Recarregar lista de colaboradores
+            await fetchEmployees();
+            setShowAddEmployeeForm(false);
+            setEditingEmployee(null);
+        } catch (err) {
+            console.error('❌ Erro ao guardar colaborador:', err);
+            throw err; // Propagar erro para o formulário
+        }
+    };
+
+    const handleDeleteEmployee = async (id: string) => {
+        if(!window.confirm('Tem a certeza que deseja remover este colaborador? Esta ação não pode ser revertida.')) {
+            return;
+        }
+
+        try {
+            console.log('🗑️ Removendo colaborador:', id);
+            const response = await fetch(`${API_URL}/employees/${id}`, {
+                method: 'DELETE'
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Erro ao remover colaborador');
+            }
+
+            console.log('✅ Colaborador removido com sucesso');
+
+            // Recarregar lista de colaboradores
+            await fetchEmployees();
+            
+            // Se estava a ver os detalhes deste colaborador, voltar à lista
+            if(selectedEmployee?.id === id) {
+                handleBackToEmployeeList();
+            }
+        } catch (err) {
+            console.error('❌ Erro ao remover colaborador:', err);
+            alert(err instanceof Error ? err.message : 'Erro ao remover colaborador');
         }
     };
 
@@ -331,6 +412,7 @@ const App: React.FC = () => {
                         employees={employees} 
                         onSelectEmployee={handleSelectEmployee}
                         onAddEmployee={handleAddEmployee}
+                        onEditEmployee={handleEditEmployee}
                         onDeleteEmployee={handleDeleteEmployee}
                     />
                 );
@@ -539,6 +621,18 @@ const App: React.FC = () => {
                     )}
                 </div>
             </main>
+
+            {/* Employee Form Modal */}
+            {showAddEmployeeForm && (
+                <EmployeeForm
+                    onClose={() => {
+                        setShowAddEmployeeForm(false);
+                        setEditingEmployee(null);
+                    }}
+                    onSave={handleSaveEmployee}
+                    employee={editingEmployee}
+                />
+            )}
         </div>
     );
 };

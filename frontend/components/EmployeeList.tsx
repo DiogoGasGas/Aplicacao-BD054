@@ -18,6 +18,7 @@ interface EmployeeListProps {
     employees: Employee[];
     onSelectEmployee: (employee: Employee) => void;
     onAddEmployee: () => void;
+    onEditEmployee: (employee: Employee) => void;
     onDeleteEmployee: (id: string) => void;
 }
 
@@ -25,6 +26,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
     employees, 
     onSelectEmployee, 
     onAddEmployee,
+    onEditEmployee,
     onDeleteEmployee
 }) => {
     const [searchTerm, setSearchTerm] = useState('');
@@ -172,7 +174,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
                                                 <Eye className="w-4 h-4" />
                                             </button>
                                             <button 
-                                                onClick={(e) => { e.stopPropagation(); }}
+                                                onClick={(e) => { e.stopPropagation(); onEditEmployee(emp); }}
                                                 className="p-2 text-gray-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" 
                                                 title="Editar"
                                             >

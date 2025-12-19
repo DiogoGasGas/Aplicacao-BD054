@@ -62,6 +62,7 @@ Aplicacao-BD054/
 
 ### Pré-requisitos
 - Node.js 18+ instalado
+- PostgreSQL (psql) instalado localmente
 - Acesso à VPN da universidade (para conectar à base de dados)
 - Git (para clonar o repositório)
 

@@ -350,62 +350,193 @@ export async function getEmployeeById(req: Request, res: Response) {
   }
 }
 
-// POST /api/employees - Criar novo colaborador
-export async function createEmployee(req: Request, res: Response) {
-  const employeeData = req.body;
+// PUT /api/employees/:id - Atualizar colaborador
+// PUT /api/employees/:id - Atualizar colaborador
+export async function updateEmployee(req: Request, res: Response) {
+  const { id } = req.params;
+  const {
+    primeiro_nome,
+    ultimo_nome,
+    email,
+    num_telemovel,
+    data_nascimento,
+    cargo,
+    id_depart,
+    nome_rua,
+    nome_localidade,
+    codigo_postal
+  } = req.body;
 
   try {
-    // Separar o nome completo em primeiro e último nome
-    const nameParts = employeeData.fullName?.split(' ') || ['', ''];
-    const primeiroNome = nameParts[0] || '';
-    const ultimoNome = nameParts.slice(1).join(' ') || '';
+    // Validar campos obrigatórios
+    if (!primeiro_nome || !ultimo_nome || !email || !num_telemovel || !cargo || !id_depart) {
+      return res.status(400).json({ error: 'Campos obrigatórios em falta' });
+    }
 
-    // Separar o endereço em rua, localidade e código postal
-    const addressParts = employeeData.address?.split(',') || ['', ''];
-    const nomeRua = addressParts[0]?.trim() || '';
-    const localidadeParts = addressParts[1]?.trim().split(' ') || [''];
-    const nomeLocalidade = localidadeParts.slice(0, -1).join(' ') || '';
-    const codigoPostal = localidadeParts[localidadeParts.length - 1] || '';
+    // Verificar se o colaborador existe
+    const checkEmployee = await pool.query('SELECT id_fun FROM funcionarios WHERE id_fun = $1', [id]);
+    if (checkEmployee.rows.length === 0) {
+      return res.status(404).json({ error: 'Colaborador não encontrado' });
+    }
 
-    // Buscar o ID do departamento
-    const departResult = await pool.query(`
-      SELECT id_depart FROM departamentos WHERE nome = $1
-    `, [employeeData.department]);
+    // Verificar se email já existe em outro colaborador
+    const emailCheck = await pool.query(
+      'SELECT id_fun FROM funcionarios WHERE email = $1 AND id_fun != $2',
+      [email, id]
+    );
+    if (emailCheck.rows.length > 0) {
+      return res.status(400).json({ error: 'Email já existe noutro colaborador' });
+    }
 
-    const idDepart = departResult.rows[0]?.id_depart || null;
+    // Atualizar colaborador
+    const result = await pool.query(`
+      UPDATE funcionarios
+      SET
+        primeiro_nome = $1,
+        ultimo_nome = $2,
+        email = $3,
+        num_telemovel = $4,
+        data_nascimento = $5,
+        cargo = $6,
+        id_depart = $7,
+        nome_rua = $8,
+        nome_localidade = $9,
+        codigo_postal = $10
+      WHERE id_fun = $11
+      RETURNING id_fun as id
+    `, [
+      primeiro_nome,
+      ultimo_nome,
+      email,
+      num_telemovel,
+      data_nascimento || null,
+      cargo,
+      id_depart,
+      nome_rua || null,
+      nome_localidade || null,
+      codigo_postal || null,
+      id
+    ]);
+
+    console.log(`✅ Colaborador ${id} atualizado com sucesso`);
+
+    res.json({
+      message: 'Colaborador atualizado com sucesso',
+      id: result.rows[0].id.toString()
+    });
+  } catch (error) {
+    console.error('Erro ao atualizar colaborador:', error);
+    res.status(500).json({
+      error: 'Erro ao atualizar colaborador',
+      message: error instanceof Error ? error.message : 'Erro desconhecido'
+    });
+  }
+}
+
+// POST /api/employees - Criar novo colaborador
+export async function createEmployee(req: Request, res: Response) {
+  const {
+    nif,
+    primeiro_nome,
+    ultimo_nome,
+    email,
+    num_telemovel,
+    data_nascimento,
+    cargo,
+    id_depart,
+    nome_rua,
+    nome_localidade,
+    codigo_postal
+  } = req.body;
+
+  try {
+    // Validar campos obrigatórios
+    if (!nif || !primeiro_nome || !ultimo_nome || !email || !num_telemovel || !data_nascimento || !cargo || !id_depart) {
+      return res.status(400).json({ error: 'Campos obrigatórios em falta' });
+    }
+
+    // Verificar se NIF já existe
+    const nifCheck = await pool.query('SELECT id_fun FROM funcionarios WHERE nif = $1', [nif]);
+    if (nifCheck.rows.length > 0) {
+      return res.status(400).json({ error: 'NIF já existe na base de dados' });
+    }
+
+    // Verificar se email já existe
+    const emailCheck = await pool.query('SELECT id_fun FROM funcionarios WHERE email = $1', [email]);
+    if (emailCheck.rows.length > 0) {
+      return res.status(400).json({ error: 'Email já existe na base de dados' });
+    }
 
     // Gerar próximo ID de funcionário
-    const maxIdResult = await pool.query(`
-      SELECT COALESCE(MAX(id_fun), 0) + 1 as next_id FROM funcionarios
-    `);
+    const maxIdResult = await pool.query('SELECT COALESCE(MAX(id_fun), 0) + 1 as next_id FROM funcionarios');
     const nextId = maxIdResult.rows[0].next_id;
 
+    // Inserir novo colaborador
     const result = await pool.query(`
       INSERT INTO funcionarios (
-        id_fun, nif, primeiro_nome, ultimo_nome, email, num_telemovel,
-        nome_rua, nome_localidade, codigo_postal,
-        data_nascimento, cargo, id_depart
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        id_fun,
+        nif,
+        primeiro_nome,
+        ultimo_nome,
+        email,
+        num_telemovel,
+        data_nascimento,
+        cargo,
+        id_depart,
+        nome_rua,
+        nome_localidade,
+        codigo_postal
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING id_fun as id
     `, [
       nextId,
-      employeeData.nif,
-      primeiroNome,
-      ultimoNome,
-      employeeData.email,
-      employeeData.phone,
-      nomeRua,
-      nomeLocalidade,
-      codigoPostal,
-      employeeData.birthDate,
-      employeeData.role,
-      idDepart
+      nif,
+      primeiro_nome,
+      ultimo_nome,
+      email,
+      num_telemovel,
+      data_nascimento,
+      cargo,
+      id_depart,
+      nome_rua || null,
+      nome_localidade || null,
+      codigo_postal || null
     ]);
+
+    const newEmployeeId = result.rows[0].id;
+
+    // Criar entrada no histórico de empresas (admissão na bd054)
+    await pool.query(`
+      INSERT INTO historico_empresas (id_fun, nome_empresa, data_inicio, cargo)
+      VALUES ($1, 'bd054', CURRENT_DATE, $2)
+    `, [newEmployeeId, cargo]);
+
+    // Se foi fornecido salário bruto, criar entrada de remuneração e salário
+    const { salario_bruto } = req.body;
+    if (salario_bruto && salario_bruto > 0) {
+      // Criar entrada em remuneracoes
+      await pool.query(`
+        INSERT INTO remuneracoes (id_fun, data_inicio, data_fim)
+        VALUES ($1, CURRENT_DATE, NULL)
+      `, [newEmployeeId]);
+
+      // Calcular salário líquido (77% do bruto)
+      const salario_liquido = (parseFloat(salario_bruto) * 0.77).toFixed(2);
+
+      // Criar entrada em salario
+      await pool.query(`
+        INSERT INTO salario (id_fun, data_inicio, salario_bruto, salario_liquido)
+        VALUES ($1, CURRENT_DATE, $2, $3)
+      `, [newEmployeeId, salario_bruto, salario_liquido]);
+
+      console.log(`💰 Salário definido: ${salario_bruto}€ bruto, ${salario_liquido}€ líquido`);
+    }
+
+    console.log(`✅ Colaborador criado com ID: ${newEmployeeId}`);
 
     res.status(201).json({
       message: 'Colaborador criado com sucesso',
-      id: nextId
+      id: newEmployeeId.toString()
     });
   } catch (error) {
     console.error('Erro ao criar colaborador:', error);
@@ -416,87 +547,32 @@ export async function createEmployee(req: Request, res: Response) {
   }
 }
 
-// PUT /api/employees/:id - Atualizar colaborador
-export async function updateEmployee(req: Request, res: Response) {
-  const { id } = req.params;
-  const employeeData = req.body;
-
-  try {
-    // Separar o nome completo em primeiro e último nome
-    const nameParts = employeeData.fullName?.split(' ') || ['', ''];
-    const primeiroNome = nameParts[0] || '';
-    const ultimoNome = nameParts.slice(1).join(' ') || '';
-
-    // Separar o endereço em rua, localidade e código postal
-    const addressParts = employeeData.address?.split(',') || ['', ''];
-    const nomeRua = addressParts[0]?.trim() || '';
-    const localidadeParts = addressParts[1]?.trim().split(' ') || [''];
-    const nomeLocalidade = localidadeParts.slice(0, -1).join(' ') || '';
-    const codigoPostal = localidadeParts[localidadeParts.length - 1] || '';
-
-    // Buscar o ID do departamento
-    const departResult = await pool.query(`
-      SELECT id_depart FROM departamentos WHERE nome = $1
-    `, [employeeData.department]);
-
-    const idDepart = departResult.rows[0]?.id_depart || null;
-
-    const result = await pool.query(`
-      UPDATE funcionarios
-      SET
-        primeiro_nome = $1,
-        ultimo_nome = $2,
-        email = $3,
-        num_telemovel = $4,
-        nome_rua = $5,
-        nome_localidade = $6,
-        codigo_postal = $7,
-        id_depart = $8,
-        cargo = $9
-      WHERE id_fun = $10
-      RETURNING id_fun as id
-    `, [
-      primeiroNome,
-      ultimoNome,
-      employeeData.email,
-      employeeData.phone,
-      nomeRua,
-      nomeLocalidade,
-      codigoPostal,
-      idDepart,
-      employeeData.role,
-      idDepart,
-      id
-    ]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Colaborador não encontrado' });
-    }
-
-    res.json({ message: 'Colaborador atualizado com sucesso' });
-  } catch (error) {
-    console.error('Erro ao atualizar colaborador:', error);
-    res.status(500).json({
-      error: 'Erro ao atualizar colaborador',
-      message: error instanceof Error ? error.message : 'Erro desconhecido'
-    });
-  }
-}
-
 // DELETE /api/employees/:id - Remover colaborador
 export async function deleteEmployee(req: Request, res: Response) {
   const { id } = req.params;
 
   try {
+    // Verificar se o colaborador existe
+    const checkEmployee = await pool.query('SELECT id_fun FROM funcionarios WHERE id_fun = $1', [id]);
+    if (checkEmployee.rows.length === 0) {
+      return res.status(404).json({ error: 'Colaborador não encontrado' });
+    }
+
+    // Se o colaborador é gerente de algum departamento, remover essa ligação
+    await pool.query(`
+      UPDATE departamentos
+      SET id_gerente = NULL
+      WHERE id_gerente = $1
+    `, [id]);
+
+    // Agora remover o colaborador (os CASCADEs cuidam do resto)
     const result = await pool.query(`
       DELETE FROM funcionarios
       WHERE id_fun = $1
       RETURNING id_fun as id
     `, [id]);
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Colaborador não encontrado' });
-    }
+    console.log(`✅ Colaborador ${id} removido com sucesso`);
 
     res.json({ message: 'Colaborador removido com sucesso' });
   } catch (error) {
