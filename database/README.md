@@ -6,13 +6,16 @@ Esta pasta contém os **scripts SQL** da base de dados PostgreSQL para o sistema
 
 ```
 database/
-├── schema.sql           # ✅ Definição das tabelas (CREATE TABLE)
-├── triggers.sql         # ✅ Triggers e funções (cálculo salários, validações)
-├── data.sql             # ⚠️  Dados iniciais (VOCÊ precisa adicionar)
-├── data_example.sql     # 📝 Exemplo de estrutura de dados
-├── SCHEMA_MAPPING.md    # 📖 Mapeamento BD ↔ Frontend
-├── NOTA_IMPORTANTE.md   # ⚠️  Função em falta nos triggers
-└── README.md            # Este ficheiro
+├── schema.sql                    # ✅ Definição das tabelas (CREATE TABLE)
+├── procedures.sql                # ⚠️  Funções, views, procedures (VOCÊ precisa adicionar)
+├── triggers.sql                  # ✅ Triggers básicos (cálculo salários, validações)
+├── data.sql                      # ⚠️  Dados iniciais (VOCÊ precisa adicionar)
+├── data_example.sql              # 📝 Exemplo de estrutura de dados
+├── SCHEMA_MAPPING.md             # 📖 Mapeamento BD ↔ Frontend
+├── NOTA_IMPORTANTE.md            # ⚠️  Função em falta nos triggers
+├── HOWTO_ADD_DATA.md             # 📘 Como copiar data.sql
+├── COMO_ADICIONAR_FICHEIROS.md   # 📘 Como adicionar todos os ficheiros
+└── README.md                     # Este ficheiro
 ```
 
 ## 🗂️ Schema: bd054_schema
@@ -81,7 +84,32 @@ SET search_path TO bd054_schema, public;
 psql -h SEU_HOST -U SEU_USER -d SUA_DATABASE -f database/schema.sql
 ```
 
-### 3️⃣ **Executar triggers.sql**
+### 3️⃣ **Adicionar procedures.sql e data.sql**
+
+⚠️ **IMPORTANTE:** Copie os ficheiros `procedures.sql` e `data.sql` do seu repositório de BD.
+
+```bash
+# Copiar do outro repositório
+cp /caminho/do/outro/repo/procedures.sql database/procedures.sql
+cp /caminho/do/outro/repo/data.sql database/data.sql
+```
+
+**Ou manualmente:** Ver `COMO_ADICIONAR_FICHEIROS.md` para instruções detalhadas.
+
+### 4️⃣ **Executar procedures.sql (Funções e Views)**
+
+⚠️ Execute ANTES de triggers.sql (os triggers dependem de funções)
+
+```bash
+# Via psql
+psql -h SEU_HOST -U SEU_USER -d SUA_DATABASE -f database/procedures.sql
+
+# Ou via pgAdmin (copiar/colar e executar)
+```
+
+**Deve incluir:** Função `calcular_total_dias_permitidos()` e outras funções auxiliares.
+
+### 5️⃣ **Executar triggers.sql**
 
 ```bash
 # Via psql
@@ -90,26 +118,9 @@ psql -h SEU_HOST -U SEU_USER -d SUA_DATABASE -f database/triggers.sql
 # Ou via pgAdmin (copiar/colar e executar)
 ```
 
-### 4️⃣ **Adicionar o seu ficheiro data.sql**
+### 6️⃣ **Executar data.sql (Inserir Dados)**
 
-⚠️ **IMPORTANTE:** Você precisa copiar o seu ficheiro `data.sql` para esta pasta.
-
-```bash
-# No seu computador, copie o data.sql do outro repositório para aqui:
-cp /caminho/do/outro/repositorio/data.sql database/data.sql
-```
-
-**Ou manualmente:**
-1. Abra o ficheiro `data.sql` do seu repositório de BD
-2. Copie o conteúdo completo
-3. Crie o ficheiro `database/data.sql` neste repositório
-4. Cole o conteúdo
-
-**Ver exemplo:** `data_example.sql` (ficheiro de referência com estrutura de exemplo)
-
-### 5️⃣ **Executar data.sql (Inserir Dados)**
-
-⚠️ **ORDEM IMPORTANTE:** Execute DEPOIS de `schema.sql` e `triggers.sql`
+⚠️ **ORDEM IMPORTANTE:** Execute DEPOIS de schema.sql, procedures.sql e triggers.sql
 
 ```bash
 # Via psql
@@ -196,20 +207,30 @@ curl http://localhost:5000/health
 curl http://localhost:5000/api/employees
 ```
 
-## 📋 Checklist
+## 📋 Checklist Completo
 
-- [ ] ✅ Scripts SQL adicionados (`schema.sql`, `triggers.sql`)
-- [ ] ⚠️  **Copiar `data.sql` do outro repositório para esta pasta**
-- [ ] Adicionar função `calcular_total_dias_permitidos()` aos triggers (ver `NOTA_IMPORTANTE.md`)
-- [ ] Schema `bd054_schema` criado no PostgreSQL
-- [ ] Executar `schema.sql` - Tabelas criadas (18 tabelas)
-- [ ] Executar `triggers.sql` - Triggers e funções criados
-- [ ] Executar `data.sql` - Dados inseridos com sucesso
+### Preparação dos Ficheiros
+- [ ] ✅ `schema.sql` está na pasta database/ (já existe)
+- [ ] ✅ `triggers.sql` está na pasta database/ (já existe)
+- [ ] ⚠️  **Copiar `procedures.sql` do outro repositório** (ver `COMO_ADICIONAR_FICHEIROS.md`)
+- [ ] ⚠️  **Copiar `data.sql` do outro repositório** (ver `COMO_ADICIONAR_FICHEIROS.md`)
+- [ ] Verificar que `procedures.sql` tem função `calcular_total_dias_permitidos()`
+
+### Execução no PostgreSQL
+- [ ] Schema `bd054_schema` criado
+- [ ] Executar `schema.sql` - Criar 18 tabelas
+- [ ] Executar `procedures.sql` - Criar funções e views
+- [ ] Executar `triggers.sql` - Criar triggers
+- [ ] Executar `data.sql` - Inserir dados
 - [ ] Verificar contagem de dados (funcionarios, departamentos, etc.)
-- [ ] Ficheiro `backend/.env` configurado com credenciais
+
+### Configuração do Backend
+- [ ] Ficheiro `backend/.env` configurado com credenciais da universidade
+- [ ] `npm install` no backend
 - [ ] Backend conecta com sucesso à BD
-- [ ] Endpoints `/health` e `/api/employees` funcionam
-- [ ] Endpoints retornam dados reais (não vazio)
+- [ ] Endpoints `/health` funciona
+- [ ] Endpoint `/api/employees` funciona
+- [ ] Endpoints retornam dados reais (não array vazio [])
 
 ## 🐛 Problemas Comuns
 
