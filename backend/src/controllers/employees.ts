@@ -3,31 +3,37 @@ import { pool } from '../config/database';
 import { Employee } from '../types';
 
 /**
- * IMPORTANTE: Estas queries SQL são EXEMPLOS e devem ser ajustadas
- * de acordo com o esquema real da sua base de dados.
- *
- * Quando copiar os ficheiros SQL para a pasta database/, atualize
- * os nomes das tabelas e colunas conforme necessário.
+ * Controllers para gestão de funcionários
+ * ATUALIZADO para corresponder ao schema real da base de dados (bd054_schema)
  */
+
+// Helper: Mapear estado de férias PT → EN
+function mapVacationStatus(estadoPT: string): 'Approved' | 'Pending' | 'Rejected' {
+  const map: Record<string, 'Approved' | 'Pending' | 'Rejected'> = {
+    'Aprovado': 'Approved',
+    'Por aprovar': 'Pending',
+    'Rejeitado': 'Rejected'
+  };
+  return map[estadoPT] || 'Pending';
+}
 
 // GET /api/employees - Listar todos os colaboradores
 export async function getAllEmployees(req: Request, res: Response) {
   try {
     const result = await pool.query(`
       SELECT
-        id,
-        full_name as "fullName",
-        nif,
-        email,
-        phone,
-        address,
-        birth_date as "birthDate",
-        department,
-        role,
-        admission_date as "admissionDate",
-        avatar_url as "avatarUrl"
-      FROM employees
-      ORDER BY full_name
+        f.id_fun as id,
+        f.primeiro_nome || ' ' || f.ultimo_nome as "fullName",
+        f.nif,
+        f.email,
+        f.num_telemovel as phone,
+        f.nome_rua || ', ' || f.nome_localidade || ' ' || f.codigo_postal as address,
+        f.data_nascimento as "birthDate",
+        COALESCE(d.nome, 'Sem Departamento') as department,
+        f.cargo as role
+      FROM bd054_schema.funcionarios f
+      LEFT JOIN bd054_schema.departamentos d ON f.id_depart = d.id_depart
+      ORDER BY f.primeiro_nome, f.ultimo_nome
     `);
 
     res.json(result.rows);
@@ -40,27 +46,27 @@ export async function getAllEmployees(req: Request, res: Response) {
   }
 }
 
-// GET /api/employees/:id - Buscar colaborador por ID
+// GET /api/employees/:id - Buscar colaborador por ID com todos os detalhes
 export async function getEmployeeById(req: Request, res: Response) {
   const { id } = req.params;
 
   try {
-    // Buscar dados básicos do colaborador
+    // 1. Buscar dados básicos do colaborador
     const employeeResult = await pool.query(`
       SELECT
-        id,
-        full_name as "fullName",
-        nif,
-        email,
-        phone,
-        address,
-        birth_date as "birthDate",
-        department,
-        role,
-        admission_date as "admissionDate",
-        avatar_url as "avatarUrl"
-      FROM employees
-      WHERE id = $1
+        f.id_fun as id,
+        f.primeiro_nome || ' ' || f.ultimo_nome as "fullName",
+        f.nif,
+        f.email,
+        f.num_telemovel as phone,
+        f.nome_rua || ', ' || f.nome_localidade || ' ' || f.codigo_postal as address,
+        f.data_nascimento as "birthDate",
+        COALESCE(d.nome, 'Sem Departamento') as department,
+        f.cargo as role,
+        (SELECT MIN(data_inicio) FROM bd054_schema.remuneracoes WHERE id_fun = f.id_fun) as "admissionDate"
+      FROM bd054_schema.funcionarios f
+      LEFT JOIN bd054_schema.departamentos d ON f.id_depart = d.id_depart
+      WHERE f.id_fun = $1
     `, [id]);
 
     if (employeeResult.rows.length === 0) {
@@ -69,123 +75,153 @@ export async function getEmployeeById(req: Request, res: Response) {
 
     const employee = employeeResult.rows[0];
 
-    // Buscar dados financeiros
-    const financialsResult = await pool.query(`
+    // 2. Buscar salário atual (mais recente)
+    const salaryResult = await pool.query(`
       SELECT
-        base_salary_gross as "baseSalaryGross",
-        net_salary as "netSalary",
-        deductions
-      FROM employee_financials
-      WHERE employee_id = $1
+        salario_bruto as "baseSalaryGross",
+        salario_liquido as "netSalary",
+        (salario_bruto - salario_liquido) as deductions
+      FROM bd054_schema.salario
+      WHERE id_fun = $1
+      ORDER BY data_inicio DESC
+      LIMIT 1
     `, [id]);
 
-    // Buscar benefícios
+    // 3. Buscar benefícios atuais
     const benefitsResult = await pool.query(`
-      SELECT id, type, value
-      FROM employee_benefits
-      WHERE employee_id = $1
-    `, [id]);
-
-    // Buscar histórico salarial
-    const salaryHistoryResult = await pool.query(`
-      SELECT date, amount, reason
-      FROM salary_history
-      WHERE employee_id = $1
-      ORDER BY date DESC
-    `, [id]);
-
-    // Buscar férias
-    const vacationsResult = await pool.query(`
       SELECT
-        total_days as "totalDays",
-        used_days as "usedDays"
-      FROM employee_vacations
-      WHERE employee_id = $1
+        b.id_fun || '-' || b.data_inicio || '-' || b.tipo as id,
+        b.tipo as type,
+        b.valor as value
+      FROM bd054_schema.beneficios b
+      WHERE b.id_fun = $1
+      ORDER BY b.data_inicio DESC
     `, [id]);
 
-    // Buscar histórico de férias
+    // 4. Buscar histórico salarial
+    const salaryHistoryResult = await pool.query(`
+      SELECT
+        s.data_inicio::text as date,
+        s.salario_bruto as amount,
+        'Ajuste salarial' as reason
+      FROM bd054_schema.salario s
+      WHERE s.id_fun = $1
+      ORDER BY s.data_inicio DESC
+    `, [id]);
+
+    // 5. Calcular férias (dias usados no ano corrente)
+    const vacationSummaryResult = await pool.query(`
+      SELECT
+        COALESCE(SUM(CASE WHEN estado_aprov = 'Aprovado' THEN num_dias ELSE 0 END), 0) as "usedDays"
+      FROM bd054_schema.ferias
+      WHERE id_fun = $1
+        AND EXTRACT(YEAR FROM data_inicio) = EXTRACT(YEAR FROM CURRENT_DATE)
+    `, [id]);
+
+    // 6. Buscar histórico de férias
     const vacationHistoryResult = await pool.query(`
       SELECT
-        id,
-        start_date as "startDate",
-        end_date as "endDate",
-        days_used as "daysUsed",
-        status
-      FROM vacation_records
-      WHERE employee_id = $1
-      ORDER BY start_date DESC
+        id_fun || '-' || data_inicio::text as id,
+        data_inicio::text as "startDate",
+        data_fim::text as "endDate",
+        num_dias as "daysUsed",
+        estado_aprov as status
+      FROM bd054_schema.ferias
+      WHERE id_fun = $1
+      ORDER BY data_inicio DESC
     `, [id]);
 
-    // Buscar formações
+    // 7. Buscar formações
     const trainingsResult = await pool.query(`
-      SELECT id, title, date, status, provider
-      FROM employee_trainings
-      WHERE employee_id = $1
-      ORDER BY date DESC
+      SELECT
+        f.id_for::text as id,
+        f.nome_formacao as title,
+        tf.data_inicio::text as date,
+        CASE
+          WHEN f.estado = 'Concluida' THEN 'Completed'
+          WHEN f.estado = 'Em curso' THEN 'Enrolled'
+          ELSE 'Available'
+        END as status,
+        'Empresa' as provider
+      FROM bd054_schema.teve_formacao tf
+      JOIN bd054_schema.formacoes f ON tf.id_for = f.id_for
+      WHERE tf.id_fun = $1
+      ORDER BY tf.data_inicio DESC
     `, [id]);
 
-    // Buscar avaliações
+    // 8. Buscar avaliações
     const evaluationsResult = await pool.query(`
       SELECT
-        id,
-        date,
-        score,
-        reviewer,
-        comments,
-        self_evaluation as "selfEvaluation",
-        document_url as "documentUrl",
-        type
-      FROM evaluations
-      WHERE employee_id = $1
-      ORDER BY date DESC
+        a.id_fun || '-' || a.id_avaliador || '-' || a.data::text as id,
+        a.data::text as date,
+        a.avaliacao_numerica as score,
+        av.primeiro_nome || ' ' || av.ultimo_nome as reviewer,
+        a.criterios as comments,
+        a.autoavaliacao as "selfEvaluation",
+        CASE
+          WHEN a.id_fun = a.id_avaliador THEN 'Self'
+          ELSE 'Manager'
+        END as type
+      FROM bd054_schema.avaliacoes a
+      JOIN bd054_schema.funcionarios av ON a.id_avaliador = av.id_fun
+      WHERE a.id_fun = $1
+      ORDER BY a.data DESC
     `, [id]);
 
-    // Buscar histórico profissional
+    // 9. Buscar histórico profissional
     const jobHistoryResult = await pool.query(`
       SELECT
-        company,
-        role,
-        start_date as "startDate",
-        end_date as "endDate",
-        is_internal as "isInternal"
-      FROM job_history
-      WHERE employee_id = $1
-      ORDER BY start_date DESC
+        nome_empresa as company,
+        cargo as role,
+        data_inicio::text as "startDate",
+        data_fim::text as "endDate",
+        (nome_empresa = 'Empresa Atual') as "isInternal"
+      FROM bd054_schema.historico_empresas
+      WHERE id_fun = $1
+      ORDER BY data_inicio DESC
     `, [id]);
 
-    // Buscar dependentes
+    // 10. Buscar dependentes
     const dependentsResult = await pool.query(`
       SELECT
-        id,
-        name,
-        relationship,
-        birth_date as "birthDate"
-      FROM dependents
-      WHERE employee_id = $1
+        id_fun || '-' || parentesco || '-' || nome as id,
+        nome as name,
+        parentesco as relationship,
+        data_nascimento::text as "birthDate"
+      FROM bd054_schema.dependentes
+      WHERE id_fun = $1
     `, [id]);
 
-    // Buscar faltas
+    // 11. Buscar faltas
     const absencesResult = await pool.query(`
-      SELECT id, date, reason, justified
-      FROM absences
-      WHERE employee_id = $1
-      ORDER BY date DESC
+      SELECT
+        id_fun || '-' || data::text as id,
+        data::text as date,
+        justificacao as reason,
+        (justificacao IS NOT NULL AND justificacao != '') as justified
+      FROM bd054_schema.faltas
+      WHERE id_fun = $1
+      ORDER BY data DESC
     `, [id]);
 
-    // Montar objeto completo
+    // Montar objeto completo Employee
     const fullEmployee: Employee = {
       ...employee,
+      avatarUrl: undefined, // Não existe na BD
       financials: {
-        baseSalaryGross: financialsResult.rows[0]?.baseSalaryGross || 0,
-        netSalary: financialsResult.rows[0]?.netSalary || 0,
-        deductions: financialsResult.rows[0]?.deductions || 0,
+        baseSalaryGross: salaryResult.rows[0]?.baseSalaryGross || 0,
+        netSalary: salaryResult.rows[0]?.netSalary || 0,
+        deductions: salaryResult.rows[0]?.deductions || 0,
         benefits: benefitsResult.rows,
         history: salaryHistoryResult.rows
       },
       vacations: {
-        totalDays: vacationsResult.rows[0]?.totalDays || 0,
-        usedDays: vacationsResult.rows[0]?.usedDays || 0,
-        history: vacationHistoryResult.rows
+        totalDays: 22, // Padrão em Portugal
+        usedDays: parseInt(vacationSummaryResult.rows[0]?.usedDays || '0'),
+        history: vacationHistoryResult.rows.map(v => ({
+          ...v,
+          status: mapVacationStatus(v.status)
+        }))
       },
       trainings: trainingsResult.rows,
       evaluations: evaluationsResult.rows,
@@ -209,28 +245,48 @@ export async function createEmployee(req: Request, res: Response) {
   const employeeData = req.body;
 
   try {
-    const result = await pool.query(`
-      INSERT INTO employees (
-        full_name, nif, email, phone, address,
-        birth_date, department, role, admission_date
+    // Separar nome completo em primeiro e último nome
+    const [primeiroNome, ...restoNome] = employeeData.fullName.split(' ');
+    const ultimoNome = restoNome.join(' ') || primeiroNome;
+
+    // Buscar próximo ID disponível
+    const maxIdResult = await pool.query(`
+      SELECT COALESCE(MAX(id_fun), 0) + 1 as next_id
+      FROM bd054_schema.funcionarios
+    `);
+    const nextId = maxIdResult.rows[0].next_id;
+
+    // Buscar id_depart pelo nome do departamento
+    const deptResult = await pool.query(`
+      SELECT id_depart
+      FROM bd054_schema.departamentos
+      WHERE nome = $1
+    `, [employeeData.department]);
+
+    const idDepart = deptResult.rows[0]?.id_depart;
+
+    // Inserir funcionário
+    await pool.query(`
+      INSERT INTO bd054_schema.funcionarios (
+        id_fun, nif, primeiro_nome, ultimo_nome, num_telemovel,
+        email, data_nascimento, cargo, id_depart
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      RETURNING id
     `, [
-      employeeData.fullName,
+      nextId,
       employeeData.nif,
-      employeeData.email,
+      primeiroNome,
+      ultimoNome,
       employeeData.phone,
-      employeeData.address,
+      employeeData.email,
       employeeData.birthDate,
-      employeeData.department,
       employeeData.role,
-      employeeData.admissionDate
+      idDepart
     ]);
 
     res.status(201).json({
       message: 'Colaborador criado com sucesso',
-      id: result.rows[0].id
+      id: nextId
     });
   } catch (error) {
     console.error('Erro ao criar colaborador:', error);
@@ -247,24 +303,37 @@ export async function updateEmployee(req: Request, res: Response) {
   const employeeData = req.body;
 
   try {
+    // Separar nome completo
+    const [primeiroNome, ...restoNome] = employeeData.fullName.split(' ');
+    const ultimoNome = restoNome.join(' ') || primeiroNome;
+
+    // Buscar id_depart
+    const deptResult = await pool.query(`
+      SELECT id_depart
+      FROM bd054_schema.departamentos
+      WHERE nome = $1
+    `, [employeeData.department]);
+
+    const idDepart = deptResult.rows[0]?.id_depart;
+
     const result = await pool.query(`
-      UPDATE employees
+      UPDATE bd054_schema.funcionarios
       SET
-        full_name = $1,
-        email = $2,
-        phone = $3,
-        address = $4,
-        department = $5,
-        role = $6
-      WHERE id = $7
-      RETURNING id
+        primeiro_nome = $1,
+        ultimo_nome = $2,
+        email = $3,
+        num_telemovel = $4,
+        cargo = $5,
+        id_depart = $6
+      WHERE id_fun = $7
+      RETURNING id_fun
     `, [
-      employeeData.fullName,
+      primeiroNome,
+      ultimoNome,
       employeeData.email,
       employeeData.phone,
-      employeeData.address,
-      employeeData.department,
       employeeData.role,
+      idDepart,
       id
     ]);
 
@@ -288,9 +357,9 @@ export async function deleteEmployee(req: Request, res: Response) {
 
   try {
     const result = await pool.query(`
-      DELETE FROM employees
-      WHERE id = $1
-      RETURNING id
+      DELETE FROM bd054_schema.funcionarios
+      WHERE id_fun = $1
+      RETURNING id_fun
     `, [id]);
 
     if (result.rows.length === 0) {
