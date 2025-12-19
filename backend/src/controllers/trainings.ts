@@ -6,24 +6,24 @@ export async function getAllTrainings(req: Request, res: Response) {
   try {
     const result = await pool.query(`
       SELECT
-        id,
-        title,
-        description,
-        start_date as "startDate",
-        end_date as "endDate",
-        status,
-        provider
-      FROM training_programs
-      ORDER BY start_date DESC
+        f.id_for as id,
+        f.nome_formacao as title,
+        f.descricao as description,
+        f.data_inicio as "startDate",
+        f.data_fim as "endDate",
+        f.estado as status,
+        'Empresa' as provider
+      FROM formacoes f
+      ORDER BY f.data_inicio DESC
     `);
 
     // Para cada programa, buscar colaboradores inscritos
     const trainingsWithEnrollments = await Promise.all(
       result.rows.map(async (training) => {
         const enrollments = await pool.query(`
-          SELECT employee_id
-          FROM training_enrollments
-          WHERE training_id = $1
+          SELECT id_fun as employee_id
+          FROM teve_formacao
+          WHERE id_for = $1
         `, [training.id]);
 
         return {
@@ -50,15 +50,15 @@ export async function getTrainingById(req: Request, res: Response) {
   try {
     const result = await pool.query(`
       SELECT
-        id,
-        title,
-        description,
-        start_date as "startDate",
-        end_date as "endDate",
-        status,
-        provider
-      FROM training_programs
-      WHERE id = $1
+        f.id_for as id,
+        f.nome_formacao as title,
+        f.descricao as description,
+        f.data_inicio as "startDate",
+        f.data_fim as "endDate",
+        f.estado as status,
+        'Empresa' as provider
+      FROM formacoes f
+      WHERE f.id_for = $1
     `, [id]);
 
     if (result.rows.length === 0) {
@@ -69,9 +69,9 @@ export async function getTrainingById(req: Request, res: Response) {
 
     // Buscar colaboradores inscritos
     const enrollments = await pool.query(`
-      SELECT employee_id
-      FROM training_enrollments
-      WHERE training_id = $1
+      SELECT id_fun as employee_id
+      FROM teve_formacao
+      WHERE id_for = $1
     `, [id]);
 
     res.json({
@@ -93,11 +93,22 @@ export async function enrollEmployee(req: Request, res: Response) {
   const { employeeId } = req.body;
 
   try {
+    // Verificar se a formação existe
+    const trainingResult = await pool.query(`
+      SELECT data_inicio, data_fim FROM formacoes WHERE id_for = $1
+    `, [id]);
+
+    if (trainingResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Formação não encontrada' });
+    }
+
+    const { data_inicio, data_fim } = trainingResult.rows[0];
+
     await pool.query(`
-      INSERT INTO training_enrollments (training_id, employee_id)
-      VALUES ($1, $2)
-      ON CONFLICT DO NOTHING
-    `, [id, employeeId]);
+      INSERT INTO teve_formacao (id_fun, id_for, data_inicio, data_fim, certificado)
+      VALUES ($1, $2, $3, $4, NULL)
+      ON CONFLICT (id_fun, id_for) DO NOTHING
+    `, [employeeId, id, data_inicio, data_fim]);
 
     res.json({ message: 'Colaborador inscrito com sucesso' });
   } catch (error) {

@@ -6,17 +6,17 @@ export async function getAllEvaluations(req: Request, res: Response) {
   try {
     const result = await pool.query(`
       SELECT
-        id,
-        employee_id as "employeeId",
-        date,
-        score,
-        reviewer,
-        comments,
-        self_evaluation as "selfEvaluation",
-        document_url as "documentUrl",
-        type
-      FROM evaluations
-      ORDER BY date DESC
+        a.id_fun as "employeeId",
+        a.date,
+        a.avaliacao_numerica as score,
+        (favaliador.primeiro_nome || ' ' || favaliador.ultimo_nome) as reviewer,
+        a.criterios as comments,
+        a.autoavaliacao as "selfEvaluation",
+        NULL as "documentUrl",
+        'Avaliação de Desempenho' as type
+      FROM avaliacoes a
+      LEFT JOIN funcionarios favaliador ON a.id_avaliador = favaliador.id_fun
+      ORDER BY a.data DESC
     `);
 
     res.json(result.rows);
@@ -36,17 +36,17 @@ export async function getEvaluationsByEmployee(req: Request, res: Response) {
   try {
     const result = await pool.query(`
       SELECT
-        id,
-        date,
-        score,
-        reviewer,
-        comments,
-        self_evaluation as "selfEvaluation",
-        document_url as "documentUrl",
-        type
-      FROM evaluations
-      WHERE employee_id = $1
-      ORDER BY date DESC
+        a.data as date,
+        a.avaliacao_numerica as score,
+        (favaliador.primeiro_nome || ' ' || favaliador.ultimo_nome) as reviewer,
+        a.criterios as comments,
+        a.autoavaliacao as "selfEvaluation",
+        NULL as "documentUrl",
+        'Avaliação de Desempenho' as type
+      FROM avaliacoes a
+      LEFT JOIN funcionarios favaliador ON a.id_avaliador = favaliador.id_fun
+      WHERE a.id_fun = $1
+      ORDER BY a.data DESC
     `, [employeeId]);
 
     res.json(result.rows);
@@ -61,20 +61,18 @@ export async function getEvaluationsByEmployee(req: Request, res: Response) {
 
 // POST /api/evaluations - Criar nova avaliação
 export async function createEvaluation(req: Request, res: Response) {
-  const { employeeId, date, score, reviewer, comments, selfEvaluation, type } = req.body;
+  const { employeeId, date, score, reviewerId, comments, selfEvaluation, type } = req.body;
 
   try {
-    const result = await pool.query(`
-      INSERT INTO evaluations (
-        employee_id, date, score, reviewer, comments, self_evaluation, type
+    await pool.query(`
+      INSERT INTO avaliacoes (
+        id_fun, id_avaliador, data, avaliacao_numerica, criterios, autoavaliacao
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      RETURNING id
-    `, [employeeId, date, score, reviewer, comments, selfEvaluation, type]);
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `, [employeeId, reviewerId, date, score, comments, selfEvaluation]);
 
     res.status(201).json({
-      message: 'Avaliação criada com sucesso',
-      id: result.rows[0].id
+      message: 'Avaliação criada com sucesso'
     });
   } catch (error) {
     console.error('Erro ao criar avaliação:', error);
