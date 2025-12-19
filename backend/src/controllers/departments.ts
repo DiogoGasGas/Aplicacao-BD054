@@ -16,7 +16,14 @@ export async function getAllDepartments(req: Request, res: Response) {
       ORDER BY d.id_depart
     `);
 
-    res.json(result.rows);
+    // Converter managerId para string se existir
+    const departments = result.rows.map(dept => ({
+      ...dept,
+      managerId: dept.managerId ? dept.managerId.toString() : null
+    }));
+
+    console.log('📋 Departamentos com gerentes:', departments);
+    res.json(departments);
   } catch (error) {
     console.error('Erro ao buscar departamentos:', error);
     res.status(500).json({

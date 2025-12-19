@@ -19,12 +19,14 @@ interface ExtendedEvaluation extends Evaluation {
 
 interface EvaluationListProps {
     employees: Employee[];
+    evaluations: ExtendedEvaluation[];
     onSelectEvaluation: (evaluation: Evaluation, employee: Employee) => void;
     onAddEvaluation: () => void;
 }
 
 const EvaluationList: React.FC<EvaluationListProps> = ({ 
     employees, 
+    evaluations,
     onSelectEvaluation, 
     onAddEvaluation 
 }) => {
@@ -33,17 +35,17 @@ const EvaluationList: React.FC<EvaluationListProps> = ({
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
 
-    // Flatten evaluations from all employees into a single list
+    // Enrich evaluations with employee data
     const allEvaluations: ExtendedEvaluation[] = useMemo(() => {
-        return employees.flatMap(emp => 
-            emp.evaluations.map(ev => ({
+        return evaluations.map(ev => {
+            const emp = employees.find(e => e.id === ev.employeeId);
+            return {
                 ...ev,
-                employeeId: emp.id,
-                employeeName: emp.fullName,
-                employeeAvatar: emp.avatarUrl
-            }))
-        ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }, [employees]);
+                employeeName: emp?.fullName || 'Desconhecido',
+                employeeAvatar: emp?.avatarUrl
+            };
+        }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [employees, evaluations]);
 
     const filteredEvaluations = useMemo(() => {
         return allEvaluations.filter(ev => {

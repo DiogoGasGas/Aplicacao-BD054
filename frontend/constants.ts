@@ -145,19 +145,14 @@ export const SALARY_RANGES = [
 
 export const MOCK_DEPARTMENTS_METADATA: DepartmentMetadata[] = [
     {
-        id: Department.IT,
-        managerId: 'EMP-001',
-        description: 'Desenvolvimento e manutenção de sistemas, infraestrutura tecnológica e inovação digital.'
-    },
-    {
-        id: Department.MARKETING,
-        managerId: 'EMP-002',
-        description: 'Gestão da marca, planeamento de campanhas, redes sociais e comunicação corporativa.'
-    },
-    {
         id: Department.HR,
-        managerId: 'EMP-003',
+        managerId: null,
         description: 'Recrutamento e seleção, gestão de talentos, processamento salarial e cultura organizacional.'
+    },
+    {
+        id: Department.IT,
+        managerId: null,
+        description: 'Desenvolvimento e manutenção de sistemas, infraestrutura tecnológica e inovação digital.'
     },
     {
         id: Department.FINANCE,
@@ -165,14 +160,29 @@ export const MOCK_DEPARTMENTS_METADATA: DepartmentMetadata[] = [
         description: 'Contabilidade, tesouraria, controlo de custos e planeamento financeiro estratégico.'
     },
     {
+        id: Department.MARKETING,
+        managerId: null,
+        description: 'Gestão da marca, planeamento de campanhas, redes sociais e comunicação corporativa.'
+    },
+    {
         id: Department.SALES,
         managerId: null,
         description: 'Vendas diretas, gestão de contas, expansão de mercado e relacionamento com clientes.'
     },
     {
-        id: Department.OPERATIONS,
+        id: Department.QUALITY,
         managerId: null,
-        description: 'Logística, gestão de cadeia de suprimentos e otimização de processos operacionais.'
+        description: 'Controlo de qualidade, auditoria e melhoria contínua de processos e produtos.'
+    },
+    {
+        id: Department.CUSTOMER_SERVICE,
+        managerId: null,
+        description: 'Atendimento ao cliente, suporte técnico e gestão de reclamações.'
+    },
+    {
+        id: Department.LEGAL,
+        managerId: null,
+        description: 'Assessoria jurídica, conformidade regulamentar e gestão de contratos.'
     }
 ];
 

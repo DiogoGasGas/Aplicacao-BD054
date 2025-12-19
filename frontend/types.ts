@@ -94,12 +94,14 @@ export interface Employee {
 }
 
 export enum Department {
-    IT = 'Tecnologia da Informação',
     HR = 'Recursos Humanos',
+    IT = 'Tecnologia da Informação',
     FINANCE = 'Financeiro',
-    SALES = 'Vendas',
     MARKETING = 'Marketing',
-    OPERATIONS = 'Operações'
+    SALES = 'Vendas',
+    QUALITY = 'Qualidade',
+    CUSTOMER_SERVICE = 'Atendimento ao Cliente',
+    LEGAL = 'Jurídico'
 }
 
 export interface DepartmentMetadata {

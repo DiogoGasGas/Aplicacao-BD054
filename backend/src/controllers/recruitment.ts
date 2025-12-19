@@ -4,23 +4,44 @@ import { pool } from '../config/database';
 // GET /api/recruitment/jobs - Listar todas as vagas
 export async function getAllJobs(req: Request, res: Response) {
   try {
+    console.log('📊 Buscando vagas...');
+    
     const result = await pool.query(`
       SELECT
         v.id_vaga as id,
         d.nome as title,
         d.nome as department,
         v.data_abertura as "openDate",
-        v.estado as status,
-        d.nome as description,
-        ARRAY_AGG(r.requisito) FILTER (WHERE r.requisito IS NOT NULL) as requirements
+        CASE 
+          WHEN v.estado = 'Aberta' THEN 'Open'
+          WHEN v.estado = 'Fechada' THEN 'Closed'
+          WHEN v.estado = 'Suspensa' THEN 'Suspended'
+          ELSE v.estado
+        END as status,
+        'Vaga para o departamento de ' || d.nome as description
       FROM vagas v
       INNER JOIN departamentos d ON v.id_depart = d.id_depart
-      LEFT JOIN requisitos_vaga r ON v.id_vaga = r.id_vaga
-      GROUP BY v.id_vaga, d.nome, v.data_abertura, v.estado
       ORDER BY v.data_abertura DESC
     `);
 
-    res.json(result.rows);
+    // Buscar requisitos para cada vaga
+    const jobsWithRequirements = await Promise.all(
+      result.rows.map(async (job) => {
+        const reqResult = await pool.query(`
+          SELECT requisito
+          FROM requisitos_vaga
+          WHERE id_vaga = $1
+        `, [job.id]);
+        
+        return {
+          ...job,
+          requirements: reqResult.rows.map(r => r.requisito)
+        };
+      })
+    );
+
+    console.log(`✅ Encontradas ${jobsWithRequirements.length} vagas`);
+    res.json(jobsWithRequirements);
   } catch (error) {
     console.error('Erro ao buscar vagas:', error);
     res.status(500).json({
@@ -68,6 +89,8 @@ export async function getJobById(req: Request, res: Response) {
 // GET /api/recruitment/candidates - Listar todos os candidatos
 export async function getAllCandidates(req: Request, res: Response) {
   try {
+    console.log('📊 Buscando candidatos...');
+    
     const result = await pool.query(`
       SELECT
         c.id_cand as id,
@@ -75,7 +98,14 @@ export async function getAllCandidates(req: Request, res: Response) {
         c.nome as name,
         c.email,
         c.telemovel as phone,
-        ca.estado as status,
+        CASE 
+          WHEN ca.estado = 'Submetido' THEN 'Applied'
+          WHEN ca.estado = 'Em análise' THEN 'Screening'
+          WHEN ca.estado = 'Entrevista' THEN 'Interview'
+          WHEN ca.estado = 'Rejeitado' THEN 'Rejected'
+          WHEN ca.estado = 'Contratado' THEN 'Hired'
+          ELSE ca.estado
+        END as status,
         ca.data_cand as "appliedDate",
         ca.id_recrutador as "recruiterId",
         NULL as "cvUrl",

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { MOCK_EMPLOYEES, MOCK_DEPARTMENTS_METADATA, MOCK_JOBS, MOCK_CANDIDATES, MOCK_TRAINING_PROGRAMS } from './constants';
+import React, { useState, useEffect } from 'react';
+import { MOCK_DEPARTMENTS_METADATA, MOCK_JOBS, MOCK_CANDIDATES, MOCK_TRAINING_PROGRAMS } from './constants';
 import { Employee, DepartmentMetadata, Department, JobOpening, Candidate, CandidateStatus, TrainingProgram, Evaluation } from './types';
 import EmployeeList from './components/EmployeeList';
 import EmployeeDetail from './components/EmployeeDetail';
@@ -13,6 +13,8 @@ import EvaluationList from './components/EvaluationList';
 import EvaluationForm from './components/EvaluationForm';
 import EvaluationDetail from './components/EvaluationDetail';
 import { LayoutDashboard, Users, Settings, LogOut, Building2, Briefcase, GraduationCap, Star } from 'lucide-react';
+
+const API_URL = 'http://localhost:3000/api';
 
 type ViewState = 
     | 'employees_list' 
@@ -29,14 +31,133 @@ type ViewState =
 
 const App: React.FC = () => {
     // Data State
-    const [employees, setEmployees] = useState<Employee[]>(MOCK_EMPLOYEES);
+    const [employees, setEmployees] = useState<Employee[]>([]);
     const [deptMetadata, setDeptMetadata] = useState<DepartmentMetadata[]>(MOCK_DEPARTMENTS_METADATA);
-    const [jobs, setJobs] = useState<JobOpening[]>(MOCK_JOBS);
-    const [candidates, setCandidates] = useState<Candidate[]>(MOCK_CANDIDATES);
-    const [trainings, setTrainings] = useState<TrainingProgram[]>(MOCK_TRAINING_PROGRAMS);
+    const [jobs, setJobs] = useState<JobOpening[]>([]);
+    const [candidates, setCandidates] = useState<Candidate[]>([]);
+    const [trainings, setTrainings] = useState<TrainingProgram[]>([]);
+    const [evaluations, setEvaluations] = useState<any[]>([]);
+    const [loading, setLoading] = useState<boolean>(true);
+    const [error, setError] = useState<string | null>(null);
     
     // View State
     const [view, setView] = useState<ViewState>('employees_list');
+    
+    // Carregar dados da API ao iniciar
+    useEffect(() => {
+        const loadData = async () => {
+            await Promise.all([
+                fetchEmployees(),
+                fetchDepartments(),
+                fetchJobs(),
+                fetchCandidates(),
+                fetchTrainings(),
+                fetchEvaluations()
+            ]);
+        };
+        loadData();
+    }, []);
+
+    // Função para buscar colaboradores da API
+    const fetchEmployees = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+            console.log('🔄 Buscando colaboradores da API...');
+            const response = await fetch(`${API_URL}/employees`);
+            console.log('📡 Resposta recebida:', response.status);
+            if (!response.ok) throw new Error('Erro ao carregar colaboradores');
+            const data = await response.json();
+            console.log('✅ Dados recebidos:', data.length, 'colaboradores');
+            console.log('👤 Primeiro colaborador:', data[0]);
+            setEmployees(data);
+        } catch (err) {
+            setError('Erro ao conectar com o servidor. Verifique se o backend está a funcionar.');
+            console.error('❌ Erro ao buscar colaboradores:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Função para buscar departamentos da API
+    const fetchDepartments = async () => {
+        try {
+            console.log('🔄 Buscando departamentos da API...');
+            const response = await fetch(`${API_URL}/departments`);
+            if (!response.ok) throw new Error('Erro ao carregar departamentos');
+            const data = await response.json();
+            console.log('✅ Departamentos recebidos:', data);
+            
+            // Mapear dados da API para DepartmentMetadata
+            const metadata: DepartmentMetadata[] = data.map((dept: any) => ({
+                id: dept.name as Department,
+                managerId: dept.managerId ? dept.managerId.toString() : null,
+                description: dept.description
+            }));
+            
+            setDeptMetadata(metadata);
+        } catch (err) {
+            console.error('❌ Erro ao buscar departamentos:', err);
+        }
+    };
+
+    // Função para buscar vagas da API
+    const fetchJobs = async () => {
+        try {
+            console.log('🔄 Buscando vagas da API...');
+            const response = await fetch(`${API_URL}/recruitment/jobs`);
+            if (!response.ok) throw new Error('Erro ao carregar vagas');
+            const data = await response.json();
+            console.log('✅ Vagas recebidas:', data.length);
+            setJobs(data);
+        } catch (err) {
+            console.error('❌ Erro ao buscar vagas:', err);
+        }
+    };
+
+    // Função para buscar candidatos da API
+    const fetchCandidates = async () => {
+        try {
+            console.log('🔄 Buscando candidatos da API...');
+            const response = await fetch(`${API_URL}/recruitment/candidates`);
+            if (!response.ok) throw new Error('Erro ao carregar candidatos');
+            const data = await response.json();
+            console.log('✅ Candidatos recebidos:', data.length);
+            setCandidates(data);
+        } catch (err) {
+            console.error('❌ Erro ao buscar candidatos:', err);
+        }
+    };
+
+    // Função para buscar formações da API
+    const fetchTrainings = async () => {
+        try {
+            console.log('🔄 Buscando formações da API...');
+            const response = await fetch(`${API_URL}/trainings`);
+            if (!response.ok) throw new Error('Erro ao carregar formações');
+            const data = await response.json();
+            console.log('✅ Formações recebidas:', data.length);
+            if (data.length > 0) {
+                console.log('📋 Primeira formação:', data[0]);
+                console.log('👥 IDs dos participantes:', data[0].enrolledEmployeeIds);
+            }
+            setTrainings(data);
+        } catch (err) {            console.error('❌ Erro ao buscar formações:', err);
+        }
+    };
+
+    // Função para buscar avaliações da API
+    const fetchEvaluations = async () => {
+        try {
+            console.log('🔄 Buscando avaliações da API...');
+            const response = await fetch(`${API_URL}/evaluations`);
+            if (!response.ok) throw new Error('Erro ao carregar avaliações');
+            const data = await response.json();
+            console.log('✅ Avaliações recebidas:', data.length);
+            setEvaluations(data);
+        } catch (err) {            console.error('❌ Erro ao buscar formações:', err);
+        }
+    };
     const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
     const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
     const [selectedJob, setSelectedJob] = useState<JobOpening | null>(null);
@@ -44,9 +165,21 @@ const App: React.FC = () => {
     const [selectedEvaluation, setSelectedEvaluation] = useState<{evaluation: Evaluation, employee: Employee} | null>(null);
 
     // --- Employee Handlers ---
-    const handleSelectEmployee = (emp: Employee) => {
-        setSelectedEmployee(emp);
-        setView('employees_detail');
+    const handleSelectEmployee = async (emp: Employee) => {
+        try {
+            console.log('🔄 Buscando detalhes completos do colaborador:', emp.id);
+            const response = await fetch(`${API_URL}/employees/${emp.id}`);
+            if (!response.ok) throw new Error('Erro ao carregar detalhes');
+            const fullEmployee = await response.json();
+            console.log('✅ Detalhes do colaborador recebidos:', fullEmployee);
+            setSelectedEmployee(fullEmployee);
+            setView('employees_detail');
+        } catch (err) {
+            console.error('❌ Erro ao buscar detalhes:', err);
+            // Fallback: usar dados básicos
+            setSelectedEmployee(emp);
+            setView('employees_detail');
+        }
     };
 
     const handleBackToEmployeeList = () => {
@@ -274,6 +407,7 @@ const App: React.FC = () => {
                 return (
                     <EvaluationList 
                         employees={employees}
+                        evaluations={evaluations}
                         onSelectEvaluation={handleSelectEvaluation}
                         onAddEvaluation={() => setView('evaluations_form')}
                     />
@@ -379,7 +513,30 @@ const App: React.FC = () => {
                 </header>
 
                 <div className="flex-1 p-4 md:p-6 overflow-hidden">
-                    {renderContent()}
+                    {loading ? (
+                        <div className="h-full flex items-center justify-center">
+                            <div className="text-center">
+                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-600 mx-auto mb-4"></div>
+                                <p className="text-gray-600">A carregar dados...</p>
+                            </div>
+                        </div>
+                    ) : error ? (
+                        <div className="h-full flex items-center justify-center">
+                            <div className="text-center max-w-md">
+                                <div className="text-red-500 text-5xl mb-4">⚠️</div>
+                                <h3 className="text-xl font-semibold text-gray-800 mb-2">Erro ao Conectar</h3>
+                                <p className="text-gray-600 mb-4">{error}</p>
+                                <button 
+                                    onClick={fetchEmployees}
+                                    className="bg-brand-600 hover:bg-brand-700 text-white px-6 py-2 rounded-lg transition-colors"
+                                >
+                                    Tentar Novamente
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        renderContent()
+                    )}
                 </div>
             </main>
         </div>

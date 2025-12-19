@@ -222,7 +222,7 @@ const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack }) => 
              </div>
 
              <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Histórico de Ausências</h3>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Histórico de Férias</h3>
                 <div className="overflow-hidden rounded-lg border border-gray-100">
                     <table className="w-full text-sm text-left">
                         <thead className="bg-gray-50">
@@ -276,7 +276,10 @@ const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack }) => 
                                 <div className="text-sm text-gray-500 mt-1 flex gap-3">
                                     <span>{t.provider}</span>
                                     <span>•</span>
-                                    <span>{new Date(t.date).toLocaleDateString('pt-PT')}</span>
+                                    <span>
+                                        {new Date(t.startDate).toLocaleDateString('pt-PT')}
+                                        {t.endDate && ` - ${new Date(t.endDate).toLocaleDateString('pt-PT')}`}
+                                    </span>
                                 </div>
                             </div>
                             <div>
@@ -321,9 +324,26 @@ const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack }) => 
                             <span className="text-xs text-yellow-600">/ 5.0</span>
                         </div>
                     </div>
-                    <div className="bg-gray-50 p-4 rounded-lg text-gray-700 text-sm italic border border-gray-100">
-                        "{e.comments}"
-                    </div>
+                    
+                    {e.comments && (
+                        <div className="mb-3">
+                            <p className="text-xs font-semibold text-gray-600 mb-1">Critérios de Avaliação:</p>
+                            <div className="bg-gray-50 p-4 rounded-lg text-gray-700 text-sm italic border border-gray-100">
+                                "{e.comments}"
+                            </div>
+                        </div>
+                    )}
+                    
+                    {e.hasDocument && (
+                        <div className="mt-4 pt-4 border-t border-gray-200">
+                            <button className="flex items-center gap-2 text-brand-600 hover:text-brand-700 text-sm font-medium">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                Visualizar Documento de Avaliação
+                            </button>
+                        </div>
+                    )}
                 </div>
             ))}
              {employee.evaluations.length === 0 && (
@@ -400,7 +420,6 @@ const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack }) => 
                         <tr>
                             <th className="px-6 py-3 font-medium text-gray-500">Data</th>
                             <th className="px-6 py-3 font-medium text-gray-500">Motivo</th>
-                            <th className="px-6 py-3 font-medium text-gray-500">Estado</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -408,21 +427,10 @@ const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack }) => 
                             <tr key={a.id}>
                                 <td className="px-6 py-4">{new Date(a.date).toLocaleDateString('pt-PT')}</td>
                                 <td className="px-6 py-4">{a.reason}</td>
-                                <td className="px-6 py-4">
-                                    {a.justified ? (
-                                        <span className="inline-flex items-center gap-1 text-green-700 bg-green-50 px-2 py-1 rounded text-xs">
-                                            <CheckCircle className="w-3 h-3" /> Justificada
-                                        </span>
-                                    ) : (
-                                        <span className="inline-flex items-center gap-1 text-red-700 bg-red-50 px-2 py-1 rounded text-xs">
-                                            <XCircle className="w-3 h-3" /> Injustificada
-                                        </span>
-                                    )}
-                                </td>
                             </tr>
                         ))}
                          {employee.absences.length === 0 && (
-                            <tr><td colSpan={3} className="px-6 py-8 text-center text-gray-400">Sem registo de faltas.</td></tr>
+                            <tr><td colSpan={2} className="px-6 py-8 text-center text-gray-400">Sem registo de faltas.</td></tr>
                          )}
                     </tbody>
                 </table>

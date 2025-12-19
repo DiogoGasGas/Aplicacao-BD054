@@ -20,6 +20,8 @@ function mapVacationStatus(estadoPT: string): 'Approved' | 'Pending' | 'Rejected
 // GET /api/employees - Listar todos os colaboradores
 export async function getAllEmployees(req: Request, res: Response) {
   try {
+    console.log('📊 Buscando colaboradores...');
+    
     const result = await pool.query(`
       SELECT
         f.id_fun as id,
@@ -38,7 +40,91 @@ export async function getAllEmployees(req: Request, res: Response) {
       ORDER BY f.primeiro_nome, f.ultimo_nome
     `);
 
-    res.json(result.rows);
+    console.log(`✅ Encontrados ${result.rows.length} colaboradores`);
+
+    // Buscar salários para cada funcionário
+    const employeesWithSalary = await Promise.all(
+      result.rows.map(async (row) => {
+        try {
+          const salaryResult = await pool.query(`
+            SELECT salario_bruto
+            FROM salario
+            WHERE id_fun = $1
+            ORDER BY data_inicio DESC
+            LIMIT 1
+          `, [row.id]);
+
+          const salary = salaryResult.rows[0];
+          const baseSalary = salary ? parseFloat(salary.salario_bruto) : 0;
+          const netSalary = baseSalary * 0.77;
+          const deductions = baseSalary - netSalary;
+          
+          return {
+            id: row.id.toString(), // Converter para string
+            fullName: row.fullName,
+            nif: row.nif,
+            email: row.email,
+            phone: row.phone,
+            address: row.address,
+            birthDate: row.birthDate,
+            department: row.department,
+            role: row.role,
+            admissionDate: row.admissionDate,
+            avatarUrl: row.avatarUrl,
+            financials: {
+              baseSalaryGross: baseSalary,
+              netSalary: netSalary,
+              deductions: deductions,
+              benefits: [],
+              history: []
+            },
+            vacations: {
+              totalDays: 22,
+              usedDays: 0,
+              history: []
+            },
+            trainings: [],
+            evaluations: [],
+            jobHistory: [],
+            dependents: []
+          };
+        } catch (err) {
+          console.error(`Erro ao buscar salário para funcionário ${row.id}:`, err);
+          return {
+            id: row.id.toString(), // Converter para string
+            fullName: row.fullName,
+            nif: row.nif,
+            email: row.email,
+            phone: row.phone,
+            address: row.address,
+            birthDate: row.birthDate,
+            department: row.department,
+            role: row.role,
+            admissionDate: row.admissionDate,
+            avatarUrl: row.avatarUrl,
+            financials: {
+              baseSalaryGross: 0,
+              netSalary: 0,
+              deductions: 0,
+              benefits: [],
+              history: []
+            },
+            vacations: {
+              totalDays: 22,
+              usedDays: 0,
+              history: []
+            },
+            trainings: [],
+            evaluations: [],
+            jobHistory: [],
+            dependents: []
+          };
+        }
+      })
+    );
+
+    console.log('📤 Enviando resposta...');
+    res.json(employeesWithSalary);
   } catch (error) {
     console.error('Erro ao buscar colaboradores:', error);
     res.status(500).json({
@@ -53,6 +139,8 @@ export async function getEmployeeById(req: Request, res: Response) {
   const { id } = req.params;
 
   try {
+    console.log(`📊 Buscando detalhes do colaborador ${id}...`);
+    
     // 1. Buscar dados básicos do colaborador
     const employeeResult = await pool.query(`
       SELECT
@@ -65,8 +153,15 @@ export async function getEmployeeById(req: Request, res: Response) {
         f.data_nascimento as "birthDate",
         d.nome as department,
         f.cargo as role,
-        NULL as "admissionDate",
-        NULL as "avatarUrl"
+        NULL as "avatarUrl",
+        (
+          SELECT h.data_inicio
+          FROM historico_empresas h
+          WHERE h.id_fun = f.id_fun
+          AND h.nome_empresa = 'bd054'
+          ORDER BY h.data_inicio DESC
+          LIMIT 1
+        ) as "admissionDate"
       FROM funcionarios f
       LEFT JOIN departamentos d ON f.id_depart = d.id_depart
       WHERE f.id_fun = $1
@@ -81,9 +176,7 @@ export async function getEmployeeById(req: Request, res: Response) {
     // Buscar dados financeiros (salário mais recente)
     const financialsResult = await pool.query(`
       SELECT
-        s.salario_bruto as "baseSalaryGross",
-        s.salario_liquido as "netSalary",
-        (s.salario_bruto - s.salario_liquido) as deductions
+        s.salario_bruto as "baseSalaryGross"
       FROM salario s
       INNER JOIN remuneracoes r ON s.id_fun = r.id_fun AND s.data_inicio = r.data_inicio
       WHERE s.id_fun = $1
@@ -92,16 +185,19 @@ export async function getEmployeeById(req: Request, res: Response) {
       LIMIT 1
     `, [id]);
 
-    // 3. Buscar benefícios atuais
+    // 3. Buscar benefícios atuais - buscar os mais recentes para cada tipo
     const benefitsResult = await pool.query(`
-      SELECT
+      SELECT DISTINCT ON (b.tipo)
+        CONCAT(b.id_fun::text, '-', b.tipo, '-', b.data_inicio) as id,
         b.tipo as type,
-        b.valor as value
+        b.valor as value,
+        b.data_inicio
       FROM beneficios b
-      INNER JOIN remuneracoes r ON b.id_fun = r.id_fun AND b.data_inicio = r.data_inicio
       WHERE b.id_fun = $1
-      AND (r.data_fim IS NULL OR r.data_fim >= CURRENT_DATE)
+      ORDER BY b.tipo, b.data_inicio DESC
     `, [id]);
+    
+    console.log(`📋 Benefícios encontrados para funcionário ${id}:`, benefitsResult.rows.length);
 
     // 4. Buscar histórico salarial
     const salaryHistoryResult = await pool.query(`
@@ -141,7 +237,8 @@ export async function getEmployeeById(req: Request, res: Response) {
       SELECT
         form.id_for as id,
         form.nome_formacao as title,
-        tf.data_inicio as date,
+        tf.data_inicio as "startDate",
+        tf.data_fim as "endDate",
         form.estado as status,
         'Empresa' as provider
       FROM teve_formacao tf
@@ -153,18 +250,24 @@ export async function getEmployeeById(req: Request, res: Response) {
     // 8. Buscar avaliações
     const evaluationsResult = await pool.query(`
       SELECT
+        CONCAT(a.id_fun::text, '-', a.data, '-', COALESCE(a.id_avaliador, 0)) as id,
         a.data as date,
         a.avaliacao_numerica as score,
         (favaliador.primeiro_nome || ' ' || favaliador.ultimo_nome) as reviewer,
         a.criterios as comments,
         a.autoavaliacao as "selfEvaluation",
-        NULL as "documentUrl",
-        'Avaliação de Desempenho' as type
+        true as "hasDocument",
+        CASE 
+          WHEN a.id_avaliador = a.id_fun THEN 'Self'
+          ELSE 'Manager'
+        END as type
       FROM avaliacoes a
       LEFT JOIN funcionarios favaliador ON a.id_avaliador = favaliador.id_fun
       WHERE a.id_fun = $1
       ORDER BY a.data DESC
     `, [id]);
+    
+    console.log(`📋 Avaliações encontradas para funcionário ${id}:`, evaluationsResult.rows.length);
 
     // 9. Buscar histórico profissional
     const jobHistoryResult = await pool.query(`
@@ -201,25 +304,39 @@ export async function getEmployeeById(req: Request, res: Response) {
     `, [id]);
 
     // Montar objeto completo Employee
-    const fullEmployee: Employee = {
+    const baseSalaryGross = parseFloat(financialsResult.rows[0]?.baseSalaryGross) || 0;
+    const netSalary = baseSalaryGross * 0.77;
+    const deductions = baseSalaryGross - netSalary;
+    
+    const fullEmployee = {
+      id: employee.id.toString(),
       ...employee,
       avatarUrl: undefined, // Não existe na BD
       financials: {
-        baseSalaryGross: salaryResult.rows[0]?.baseSalaryGross || 0,
-        netSalary: salaryResult.rows[0]?.netSalary || 0,
-        deductions: salaryResult.rows[0]?.deductions || 0,
-        benefits: benefitsResult.rows,
+        baseSalaryGross: baseSalaryGross,
+        netSalary: netSalary,
+        deductions: deductions,
+        benefits: benefitsResult.rows.map(b => ({
+          ...b,
+          value: parseFloat(b.value)
+        })),
         history: salaryHistoryResult.rows
       },
       vacations: {
         totalDays: vacationsResult.rows[0]?.totalDays || 22,
         usedDays: vacationsResult.rows[0]?.usedDays || 0,
-        history: vacationHistoryResult.rows
+        history: vacationHistoryResult.rows.map(v => ({
+          ...v,
+          status: mapVacationStatus(v.status)
+        }))
       },
       trainings: trainingsResult.rows,
       evaluations: evaluationsResult.rows,
       jobHistory: jobHistoryResult.rows,
-      dependents: dependentsResult.rows,
+      dependents: dependentsResult.rows.map(d => ({
+        id: `${id}-${d.name}`,
+        ...d
+      })),
       absences: absencesResult.rows
     };
 

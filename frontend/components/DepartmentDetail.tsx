@@ -46,11 +46,40 @@ const DepartmentDetail: React.FC<DepartmentDetailProps> = ({
     }, [employees]);
 
     const chartData = useMemo(() => {
-        return employees.map(e => ({
-            name: e.fullName.split(' ')[0], // First name only for chart
-            fullName: e.fullName,
-            salary: e.financials.baseSalaryGross
-        })).sort((a, b) => b.salary - a.salary);
+        if (employees.length === 0) return [];
+        
+        // Encontrar min e max salários
+        const salaries = employees.map(e => e.financials.baseSalaryGross);
+        const minSalary = Math.min(...salaries);
+        const maxSalary = Math.max(...salaries);
+        
+        // Criar faixas de 500€
+        const binSize = 500;
+        const minBin = Math.floor(minSalary / binSize) * binSize;
+        const maxBin = Math.ceil(maxSalary / binSize) * binSize;
+        
+        // Criar bins
+        const bins: { [key: string]: number } = {};
+        for (let i = minBin; i <= maxBin; i += binSize) {
+            const binLabel = `${(i/1000).toFixed(1)}-${((i+binSize)/1000).toFixed(1)}k`;
+            bins[binLabel] = 0;
+        }
+        
+        // Contar empregados em cada bin
+        employees.forEach(e => {
+            const salary = e.financials.baseSalaryGross;
+            const binIndex = Math.floor((salary - minBin) / binSize);
+            const binStart = minBin + (binIndex * binSize);
+            const binLabel = `${(binStart/1000).toFixed(1)}-${((binStart+binSize)/1000).toFixed(1)}k`;
+            if (bins[binLabel] !== undefined) {
+                bins[binLabel]++;
+            }
+        });
+        
+        return Object.entries(bins).map(([range, count]) => ({
+            range,
+            count
+        }));
     }, [employees]);
 
     const handleSaveManager = () => {
@@ -215,20 +244,30 @@ const DepartmentDetail: React.FC<DepartmentDetailProps> = ({
                          <div className="flex-1 w-full min-h-0">
                              {employees.length > 0 ? (
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
-                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                                        <XAxis type="number" hide />
-                                        <YAxis dataKey="name" type="category" width={80} tick={{fontSize: 12}} />
+                                    <BarChart data={chartData} margin={{ top: 5, right: 30, left: 40, bottom: 40 }}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis 
+                                            dataKey="range" 
+                                            angle={-45} 
+                                            textAnchor="end" 
+                                            height={80}
+                                            tick={{fontSize: 11}}
+                                            label={{ value: 'Faixa Salarial (€)', position: 'insideBottom', offset: -35, style: { fontSize: 12, fontWeight: 'bold' } }}
+                                        />
+                                        <YAxis 
+                                            label={{ value: 'Nº Colaboradores', angle: -90, position: 'insideLeft', style: { fontSize: 12, fontWeight: 'bold' } }}
+                                            allowDecimals={false}
+                                        />
                                         <Tooltip 
-                                            cursor={{fill: 'transparent'}}
+                                            cursor={{fill: 'rgba(59, 130, 246, 0.1)'}}
                                             content={({ active, payload }) => {
                                                 if (active && payload && payload.length) {
                                                     const data = payload[0].payload;
                                                     return (
-                                                        <div className="bg-white p-2 border border-gray-200 shadow-lg rounded text-xs">
-                                                            <p className="font-bold">{data.fullName}</p>
-                                                            <p className="text-brand-600">
-                                                                {data.salary.toLocaleString('pt-PT', { style: 'currency', currency: 'EUR' })}
+                                                        <div className="bg-white p-3 border border-gray-200 shadow-lg rounded">
+                                                            <p className="font-semibold text-sm">Faixa: €{data.range}</p>
+                                                            <p className="text-brand-600 font-bold">
+                                                                {data.count} colaborador{data.count !== 1 ? 'es' : ''}
                                                             </p>
                                                         </div>
                                                     );
@@ -236,11 +275,7 @@ const DepartmentDetail: React.FC<DepartmentDetailProps> = ({
                                                 return null;
                                             }}
                                         />
-                                        <Bar dataKey="salary" fill="#3b82f6" radius={[0, 4, 4, 0]}>
-                                            {chartData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={`hsl(217, 91%, ${60 + (index * 5)}%)`} />
-                                            ))}
-                                        </Bar>
+                                        <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                                     </BarChart>
                                 </ResponsiveContainer>
                              ) : (

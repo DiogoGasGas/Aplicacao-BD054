@@ -4,22 +4,40 @@ import { pool } from '../config/database';
 // GET /api/evaluations - Listar todas as avaliações
 export async function getAllEvaluations(req: Request, res: Response) {
   try {
+    console.log('📊 Buscando avaliações...');
+    
     const result = await pool.query(`
       SELECT
         a.id_fun as "employeeId",
-        a.date,
+        a.data as date,
         a.avaliacao_numerica as score,
         (favaliador.primeiro_nome || ' ' || favaliador.ultimo_nome) as reviewer,
         a.criterios as comments,
         a.autoavaliacao as "selfEvaluation",
         NULL as "documentUrl",
-        'Avaliação de Desempenho' as type
+        CASE 
+          WHEN a.id_avaliador = a.id_fun THEN 'Self'
+          ELSE 'Manager'
+        END as type
       FROM avaliacoes a
       LEFT JOIN funcionarios favaliador ON a.id_avaliador = favaliador.id_fun
       ORDER BY a.data DESC
     `);
 
-    res.json(result.rows);
+    const evaluations = result.rows.map(row => ({
+      id: `${row.employeeId}-${row.date}`,
+      employeeId: row.employeeId.toString(),
+      date: row.date,
+      score: row.score,
+      reviewer: row.reviewer,
+      comments: row.comments,
+      selfEvaluation: row.selfEvaluation,
+      documentUrl: row.documentUrl,
+      type: row.type
+    }));
+
+    console.log(`✅ Encontradas ${evaluations.length} avaliações`);
+    res.json(evaluations);
   } catch (error) {
     console.error('Erro ao buscar avaliações:', error);
     res.status(500).json({

@@ -4,6 +4,8 @@ import { pool } from '../config/database';
 // GET /api/trainings - Listar todos os programas de formação
 export async function getAllTrainings(req: Request, res: Response) {
   try {
+    console.log('📊 Buscando formações...');
+    
     const result = await pool.query(`
       SELECT
         f.id_for as id,
@@ -11,7 +13,13 @@ export async function getAllTrainings(req: Request, res: Response) {
         f.descricao as description,
         f.data_inicio as "startDate",
         f.data_fim as "endDate",
-        f.estado as status,
+        CASE 
+          WHEN f.estado = 'Planeada' THEN 'Planned'
+          WHEN f.estado = 'Em curso' THEN 'In Progress'
+          WHEN f.estado = 'Concluida' THEN 'Completed'
+          WHEN f.estado = 'Cancelada' THEN 'Cancelled'
+          ELSE f.estado
+        END as status,
         'Empresa' as provider
       FROM formacoes f
       ORDER BY f.data_inicio DESC
@@ -26,13 +34,17 @@ export async function getAllTrainings(req: Request, res: Response) {
           WHERE id_for = $1
         `, [training.id]);
 
+        const enrolledIds = enrollments.rows.map(e => e.employee_id.toString());
+        
         return {
           ...training,
-          enrolledEmployeeIds: enrollments.rows.map(e => e.employee_id)
+          enrolledEmployeeIds: enrolledIds
         };
       })
     );
 
+    console.log(`✅ Encontradas ${trainingsWithEnrollments.length} formações`);
+    console.log('📋 Primeira formação:', trainingsWithEnrollments[0]);
     res.json(trainingsWithEnrollments);
   } catch (error) {
     console.error('Erro ao buscar formações:', error);
