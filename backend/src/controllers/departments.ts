@@ -6,11 +6,14 @@ export async function getAllDepartments(req: Request, res: Response) {
   try {
     const result = await pool.query(`
       SELECT
-        id,
-        manager_id as "managerId",
-        description
-      FROM departments
-      ORDER BY id
+        d.id_depart as id,
+        d.nome as name,
+        d.id_gerente as "managerId",
+        (f.primeiro_nome || ' ' || f.ultimo_nome) as "managerName",
+        d.nome as description
+      FROM departamentos d
+      LEFT JOIN funcionarios f ON d.id_gerente = f.id_fun
+      ORDER BY d.id_depart
     `);
 
     res.json(result.rows);
@@ -30,11 +33,14 @@ export async function getDepartmentById(req: Request, res: Response) {
   try {
     const result = await pool.query(`
       SELECT
-        id,
-        manager_id as "managerId",
-        description
-      FROM departments
-      WHERE id = $1
+        d.id_depart as id,
+        d.nome as name,
+        d.id_gerente as "managerId",
+        (f.primeiro_nome || ' ' || f.ultimo_nome) as "managerName",
+        d.nome as description
+      FROM departamentos d
+      LEFT JOIN funcionarios f ON d.id_gerente = f.id_fun
+      WHERE d.id_depart = $1
     `, [id]);
 
     if (result.rows.length === 0) {
@@ -58,13 +64,13 @@ export async function getDepartmentEmployees(req: Request, res: Response) {
   try {
     const result = await pool.query(`
       SELECT
-        id,
-        full_name as "fullName",
-        email,
-        role
-      FROM employees
-      WHERE department = $1
-      ORDER BY full_name
+        f.id_fun as id,
+        (f.primeiro_nome || ' ' || f.ultimo_nome) as "fullName",
+        f.email,
+        f.cargo as role
+      FROM funcionarios f
+      WHERE f.id_depart = $1
+      ORDER BY f.primeiro_nome, f.ultimo_nome
     `, [id]);
 
     res.json(result.rows);

@@ -6,15 +6,18 @@ export async function getAllJobs(req: Request, res: Response) {
   try {
     const result = await pool.query(`
       SELECT
-        id,
-        title,
-        department,
-        open_date as "openDate",
-        status,
-        description,
-        requirements
-      FROM job_openings
-      ORDER BY open_date DESC
+        v.id_vaga as id,
+        d.nome as title,
+        d.nome as department,
+        v.data_abertura as "openDate",
+        v.estado as status,
+        d.nome as description,
+        ARRAY_AGG(r.requisito) FILTER (WHERE r.requisito IS NOT NULL) as requirements
+      FROM vagas v
+      INNER JOIN departamentos d ON v.id_depart = d.id_depart
+      LEFT JOIN requisitos_vaga r ON v.id_vaga = r.id_vaga
+      GROUP BY v.id_vaga, d.nome, v.data_abertura, v.estado
+      ORDER BY v.data_abertura DESC
     `);
 
     res.json(result.rows);
@@ -34,15 +37,18 @@ export async function getJobById(req: Request, res: Response) {
   try {
     const result = await pool.query(`
       SELECT
-        id,
-        title,
-        department,
-        open_date as "openDate",
-        status,
-        description,
-        requirements
-      FROM job_openings
-      WHERE id = $1
+        v.id_vaga as id,
+        d.nome as title,
+        d.nome as department,
+        v.data_abertura as "openDate",
+        v.estado as status,
+        d.nome as description,
+        ARRAY_AGG(r.requisito) FILTER (WHERE r.requisito IS NOT NULL) as requirements
+      FROM vagas v
+      INNER JOIN departamentos d ON v.id_depart = d.id_depart
+      LEFT JOIN requisitos_vaga r ON v.id_vaga = r.id_vaga
+      WHERE v.id_vaga = $1
+      GROUP BY v.id_vaga, d.nome, v.data_abertura, v.estado
     `, [id]);
 
     if (result.rows.length === 0) {
@@ -64,18 +70,19 @@ export async function getAllCandidates(req: Request, res: Response) {
   try {
     const result = await pool.query(`
       SELECT
-        id,
-        job_id as "jobId",
-        name,
-        email,
-        phone,
-        status,
-        applied_date as "appliedDate",
-        recruiter_id as "recruiterId",
-        cv_url as "cvUrl",
-        cover_letter as "coverLetter"
-      FROM candidates
-      ORDER BY applied_date DESC
+        c.id_cand as id,
+        ca.id_vaga as "jobId",
+        c.nome as name,
+        c.email,
+        c.telemovel as phone,
+        ca.estado as status,
+        ca.data_cand as "appliedDate",
+        ca.id_recrutador as "recruiterId",
+        NULL as "cvUrl",
+        NULL as "coverLetter"
+      FROM candidatos c
+      LEFT JOIN candidato_a ca ON c.id_cand = ca.id_cand
+      ORDER BY ca.data_cand DESC NULLS LAST
     `);
 
     res.json(result.rows);
@@ -95,17 +102,18 @@ export async function getCandidatesByJob(req: Request, res: Response) {
   try {
     const result = await pool.query(`
       SELECT
-        id,
-        job_id as "jobId",
-        name,
-        email,
-        phone,
-        status,
-        applied_date as "appliedDate",
-        recruiter_id as "recruiterId"
-      FROM candidates
-      WHERE job_id = $1
-      ORDER BY applied_date DESC
+        c.id_cand as id,
+        ca.id_vaga as "jobId",
+        c.nome as name,
+        c.email,
+        c.telemovel as phone,
+        ca.estado as status,
+        ca.data_cand as "appliedDate",
+        ca.id_recrutador as "recruiterId"
+      FROM candidato_a ca
+      INNER JOIN candidatos c ON ca.id_cand = c.id_cand
+      WHERE ca.id_vaga = $1
+      ORDER BY ca.data_cand DESC
     `, [jobId]);
 
     res.json(result.rows);
@@ -121,15 +129,15 @@ export async function getCandidatesByJob(req: Request, res: Response) {
 // PUT /api/recruitment/candidates/:id/status - Atualizar status do candidato
 export async function updateCandidateStatus(req: Request, res: Response) {
   const { id } = req.params;
-  const { status } = req.body;
+  const { status, jobId } = req.body;
 
   try {
     const result = await pool.query(`
-      UPDATE candidates
-      SET status = $1
-      WHERE id = $2
-      RETURNING id
-    `, [status, id]);
+      UPDATE candidato_a
+      SET estado = $1
+      WHERE id_cand = $2 AND id_vaga = $3
+      RETURNING id_cand as id
+    `, [status, id, jobId]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Candidato não encontrado' });

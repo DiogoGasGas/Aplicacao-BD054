@@ -15,6 +15,9 @@ const poolConfig: PoolConfig = {
   max: 20, // número máximo de conexões
   idleTimeoutMillis: 30000, // tempo que uma conexão pode ficar idle
   connectionTimeoutMillis: 2000, // tempo máximo para obter uma conexão
+
+  // Definir o search_path para usar o schema bd054_schema
+  options: '-c search_path=bd054_schema,public',
 };
 
 // Criar pool de conexões
