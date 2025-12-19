@@ -8,8 +8,10 @@ Esta pasta contém os **scripts SQL** da base de dados PostgreSQL para o sistema
 database/
 ├── schema.sql           # ✅ Definição das tabelas (CREATE TABLE)
 ├── triggers.sql         # ✅ Triggers e funções (cálculo salários, validações)
+├── data.sql             # ⚠️  Dados iniciais (VOCÊ precisa adicionar)
+├── data_example.sql     # 📝 Exemplo de estrutura de dados
 ├── SCHEMA_MAPPING.md    # 📖 Mapeamento BD ↔ Frontend
-├── data.sql             # 📝 Dados iniciais (criar se necessário)
+├── NOTA_IMPORTANTE.md   # ⚠️  Função em falta nos triggers
 └── README.md            # Este ficheiro
 ```
 
@@ -88,20 +90,63 @@ psql -h SEU_HOST -U SEU_USER -d SUA_DATABASE -f database/triggers.sql
 # Ou via pgAdmin (copiar/colar e executar)
 ```
 
-### 4️⃣ **Verificar Criação**
+### 4️⃣ **Adicionar o seu ficheiro data.sql**
+
+⚠️ **IMPORTANTE:** Você precisa copiar o seu ficheiro `data.sql` para esta pasta.
+
+```bash
+# No seu computador, copie o data.sql do outro repositório para aqui:
+cp /caminho/do/outro/repositorio/data.sql database/data.sql
+```
+
+**Ou manualmente:**
+1. Abra o ficheiro `data.sql` do seu repositório de BD
+2. Copie o conteúdo completo
+3. Crie o ficheiro `database/data.sql` neste repositório
+4. Cole o conteúdo
+
+**Ver exemplo:** `data_example.sql` (ficheiro de referência com estrutura de exemplo)
+
+### 5️⃣ **Executar data.sql (Inserir Dados)**
+
+⚠️ **ORDEM IMPORTANTE:** Execute DEPOIS de `schema.sql` e `triggers.sql`
+
+```bash
+# Via psql
+psql -h SEU_HOST -U SEU_USER -d SUA_DATABASE -f database/data.sql
+
+# Ou via pgAdmin:
+# 1. Abrir Query Tool
+# 2. Copiar/colar conteúdo de data.sql
+# 3. Executar (F5)
+```
+
+**Nota:** Se o ficheiro for muito grande, pode demorar alguns minutos.
+
+### 6️⃣ **Verificar Criação de Tabelas e Dados**
 
 ```sql
--- Ver todas as tabelas criadas
+-- 1. Ver todas as tabelas criadas
 SELECT table_name
 FROM information_schema.tables
 WHERE table_schema = 'bd054_schema'
 ORDER BY table_name;
 
--- Deve retornar:
+-- Deve retornar 18 tabelas:
 -- avaliacoes, beneficios, candidato_a, candidatos, departamentos,
 -- dependentes, faltas, ferias, formacoes, funcionarios,
 -- historico_empresas, permissoes, remuneracoes, requisitos_vaga,
 -- salario, teve_formacao, utilizadores, vagas
+
+-- 2. Verificar se dados foram inseridos
+SELECT COUNT(*) as total_funcionarios FROM bd054_schema.funcionarios;
+SELECT COUNT(*) as total_departamentos FROM bd054_schema.departamentos;
+SELECT COUNT(*) as total_vagas FROM bd054_schema.vagas;
+
+-- 3. Ver primeiros funcionários
+SELECT id_fun, primeiro_nome, ultimo_nome, email, cargo
+FROM bd054_schema.funcionarios
+LIMIT 5;
 ```
 
 ## 🧪 Testar Conexão do Backend
@@ -154,12 +199,17 @@ curl http://localhost:5000/api/employees
 ## 📋 Checklist
 
 - [ ] ✅ Scripts SQL adicionados (`schema.sql`, `triggers.sql`)
+- [ ] ⚠️  **Copiar `data.sql` do outro repositório para esta pasta**
+- [ ] Adicionar função `calcular_total_dias_permitidos()` aos triggers (ver `NOTA_IMPORTANTE.md`)
 - [ ] Schema `bd054_schema` criado no PostgreSQL
-- [ ] Tabelas criadas com sucesso (18 tabelas)
-- [ ] Triggers criados e funcionais
-- [ ] Ficheiro `backend/.env` configurado
+- [ ] Executar `schema.sql` - Tabelas criadas (18 tabelas)
+- [ ] Executar `triggers.sql` - Triggers e funções criados
+- [ ] Executar `data.sql` - Dados inseridos com sucesso
+- [ ] Verificar contagem de dados (funcionarios, departamentos, etc.)
+- [ ] Ficheiro `backend/.env` configurado com credenciais
 - [ ] Backend conecta com sucesso à BD
 - [ ] Endpoints `/health` e `/api/employees` funcionam
+- [ ] Endpoints retornam dados reais (não vazio)
 
 ## 🐛 Problemas Comuns
 
@@ -176,11 +226,30 @@ CREATE SCHEMA bd054_schema;
 -- Depois executar schema.sql novamente
 ```
 
+### Erro ao executar data.sql
+```
+ERROR: insert or update on table "X" violates foreign key constraint
+```
+**Solução:** Executar scripts na ordem correta:
+1. `schema.sql` (cria tabelas)
+2. `triggers.sql` (cria funções)
+3. `data.sql` (insere dados)
+
+**Ou:** O data.sql tem ordem errada de inserção. Dados devem ser inseridos respeitando foreign keys:
+- `departamentos` ANTES de `funcionarios` (sem gerente)
+- `funcionarios` ANTES de atualizar gerentes
+- `remuneracoes` ANTES de `salario`
+
 ### Backend não conecta
 - ✅ Verificar credenciais em `.env`
 - ✅ Testar conexão com pgAdmin
 - ✅ Verificar VPN da universidade
 - ✅ Ver se porta 5432 está acessível
+
+### API retorna dados vazios []
+- ✅ Verificar se `data.sql` foi executado
+- ✅ Executar query: `SELECT COUNT(*) FROM bd054_schema.funcionarios;`
+- ✅ Se retornar 0, executar `data.sql` novamente
 
 ## 📖 Documentação Adicional
 
